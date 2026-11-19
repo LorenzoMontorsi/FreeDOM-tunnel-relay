@@ -128,7 +128,8 @@ sealed class SessionUdp : IDisposable
                 continue;
             }
 
-            var client = Volatile.Read(ref _client);            if (client is null || r.ReceivedBytes > UdpCodec.MaxPayload) continue;
+            var client = Volatile.Read(ref _client);
+            if (client is null || r.ReceivedBytes > UdpCodec.MaxPayload) continue;
 
             var visitor = (IPEndPoint)r.RemoteEndPoint;
             if (!port.ByEndpoint.TryGetValue(visitor, out var flow))
