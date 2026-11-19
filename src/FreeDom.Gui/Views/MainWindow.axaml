@@ -1,0 +1,177 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FreeDom.Gui.ViewModels"
+        xmlns:sys="using:System"
+        x:Class="FreeDom.Gui.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/freedom.png"
+        Title="FreeDOM"
+        Width="1000" Height="740" MinWidth="760" MinHeight="540"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.Styles>
+    <Style Selector="ListBox#LogList ListBoxItem">
+      <Setter Property="Padding" Value="12,1" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="TextBlock.colhead">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto,200" Margin="20,16,20,16">
+
+    <!-- Header: logo, status, start/stop -->
+    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16">
+      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <Image Source="/Assets/freedom.png" Width="34" Height="34" />
+        <TextBlock Text="FreeDOM" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="28,0,12,0" VerticalAlignment="Center">
+        <Ellipse Width="11" Height="11" Fill="{Binding StatusBrush}" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding StatusDetail}" Opacity="0.7" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" MaxWidth="440" ToolTip.Tip="{Binding StatusDetail}" />
+      </StackPanel>
+
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="14">
+        <TextBlock VerticalAlignment="Center" Opacity="0.7" IsVisible="{Binding IsRunning}"
+                   Text="{Binding ActiveConnections, StringFormat='{}{0} connessioni attive'}" />
+        <Button Classes="accent" Content="{Binding StartStopText}" Command="{Binding StartStopCommand}"
+                MinWidth="120" Height="38" FontWeight="SemiBold" HorizontalContentAlignment="Center" />
+      </StackPanel>
+    </Grid>
+
+    <ScrollViewer Grid.Row="1" Padding="0,0,6,0">
+      <StackPanel Spacing="14">
+
+        <!-- Certificate trust prompt -->
+        <Border Classes="card" IsVisible="{Binding HasPendingFingerprint}" BorderBrush="#F59E0B" BorderThickness="2">
+          <StackPanel Spacing="8">
+            <TextBlock Text="{Binding PendingFingerprintTitle}" FontWeight="Bold" FontSize="15" />
+            <TextBlock Text="{Binding PendingFingerprintText}" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding PendingFingerprint}" FontWeight="SemiBold"
+                                 FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+              <Button Classes="accent" Content="Fidati e connetti" Command="{Binding TrustFingerprintCommand}" />
+              <Button Content="Annulla" Command="{Binding DismissFingerprintCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Server settings -->
+        <Border Classes="card">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="section" Text="SERVER" />
+            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding CanEdit}">
+              <TextBlock Classes="label" Text="Indirizzo" />
+              <TextBox Grid.Column="1" Text="{Binding Server}" PlaceholderText="tuavps.it:7835" Margin="0,0,20,8" />
+
+              <TextBlock Grid.Column="2" Classes="label" Text="Token" />
+              <Grid Grid.Column="3" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                <TextBox Text="{Binding Token}" PasswordChar="•" RevealPassword="{Binding ShowToken}"
+                         PlaceholderText="segreto del server" />
+                <ToggleButton Grid.Column="1" Content="Mostra" IsChecked="{Binding ShowToken}" Margin="6,0,0,0" />
+              </Grid>
+
+              <TextBlock Grid.Row="1" Classes="label" Text="Fingerprint" />
+              <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding Fingerprint}"
+                       FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace"
+                       PlaceholderText="vuoto = te lo propone alla prima connessione" />
+            </Grid>
+            <WrapPanel Margin="0,8,0,0">
+              <CheckBox Content="TLS" IsChecked="{Binding UseTls}" IsEnabled="{Binding CanEdit}" Margin="0,0,20,0" />
+              <CheckBox Content="Ignora certificato (solo test)" IsChecked="{Binding Insecure}" IsEnabled="{Binding CanEdit}" Margin="0,0,20,0" />
+              <CheckBox Content="Connetti all'avvio" IsChecked="{Binding AutoConnect}" Margin="0,0,20,0" />
+              <CheckBox Content="Chiudendo la finestra resta nell'area di notifica" IsChecked="{Binding MinimizeToTray}" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Tunnels -->
+        <Border Classes="card">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="section" Text="TUNNEL" VerticalAlignment="Center" Margin="0" />
+              <Button Grid.Column="1" Content="+ Aggiungi tunnel" Command="{Binding AddTunnelCommand}" IsEnabled="{Binding CanEdit}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="36,140,90,170,*,44">
+              <TextBlock Grid.Column="1" Classes="colhead" Text="NOME" />
+              <TextBlock Grid.Column="2" Classes="colhead" Text="TIPO" />
+              <TextBlock Grid.Column="3" Classes="colhead" Text="LOCALE" />
+              <TextBlock Grid.Column="4" Classes="colhead" Text="PUBBLICO (sottodominio / dominio / porta)" />
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding Tunnels}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TunnelRowViewModel">
+                  <StackPanel Margin="0,0,0,10">
+                    <Grid ColumnDefinitions="36,140,90,170,*,44">
+                      <CheckBox IsChecked="{Binding Enabled}" IsEnabled="{Binding IsEditable}"
+                                ToolTip.Tip="Attivo" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Text="{Binding Name}" PlaceholderText="nome"
+                               IsEnabled="{Binding IsEditable}" Margin="0,0,8,0" />
+                      <ComboBox Grid.Column="2" ItemsSource="{x:Static vm:TunnelRowViewModel.Types}"
+                                SelectedItem="{Binding Type}" IsEnabled="{Binding IsEditable}"
+                                HorizontalAlignment="Stretch" Margin="0,0,8,0" />
+                      <TextBox Grid.Column="3" Text="{Binding Local}" PlaceholderText="3000 o host:porta"
+                               IsEnabled="{Binding IsEditable}" Margin="0,0,8,0" />
+
+                      <Grid Grid.Column="4" ColumnDefinitions="*,*" IsVisible="{Binding IsHttp}">
+                        <TextBox Text="{Binding Subdomain}" PlaceholderText="sottodominio (vuoto = casuale)"
+                                 IsEnabled="{Binding IsEditable}" Margin="0,0,8,0" />
+                        <TextBox Grid.Column="1" Text="{Binding Hostname}" PlaceholderText="oppure dominio tuo (opz.)"
+                                 IsEnabled="{Binding IsEditable}" />
+                      </Grid>
+                      <TextBox Grid.Column="4" IsVisible="{Binding IsTcp}" Text="{Binding RemotePort}"
+                               PlaceholderText="porta pubblica (vuoto = casuale)" IsEnabled="{Binding IsEditable}" />
+
+                      <Button Grid.Column="5" Content="×" FontSize="18" Padding="0" Width="34" Height="32"
+                              HorizontalAlignment="Right" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                              Command="{Binding RemoveCommand}" IsEnabled="{Binding IsEditable}" ToolTip.Tip="Rimuovi" />
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="36,6,0,0" IsVisible="{Binding HasPublicUrl}">
+                      <Ellipse Width="8" Height="8" Fill="#22C55E" VerticalAlignment="Center" />
+                      <SelectableTextBlock Text="{Binding PublicUrl}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding LocalTarget}" Opacity="0.6" VerticalAlignment="Center" />
+                      <Button Content="Copia" Command="{Binding CopyCommand}" Padding="10,2" />
+                      <Button Content="Apri" Command="{Binding OpenCommand}" Padding="10,2" IsVisible="{Binding IsHttp}" />
+                    </StackPanel>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+
+    <GridSplitter Grid.Row="2" Height="10" Background="Transparent" ResizeDirection="Rows" />
+
+    <!-- Log -->
+    <Border Grid.Row="3" Classes="card" Padding="0">
+      <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="14,8,10,6">
+          <TextBlock Classes="section" Text="LOG" Margin="0" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Classes="hint" Text="{Binding ConfigHint}" Margin="14,0"
+                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          <Button Grid.Column="2" Content="Apri cartella config" Command="{Binding OpenConfigFolderCommand}"
+                  Padding="10,2" Margin="0,0,6,0" />
+          <Button Grid.Column="3" Content="Pulisci" Command="{Binding ClearLogCommand}" Padding="10,2" />
+        </Grid>
+        <ListBox Grid.Row="1" x:Name="LogList" ItemsSource="{Binding LogLines}" Background="Transparent"
+                 FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" FontSize="12">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="sys:String">
+              <TextBlock Text="{Binding}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

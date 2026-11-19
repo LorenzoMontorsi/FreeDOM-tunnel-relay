@@ -1,0 +1,17 @@
+[Unit]
+Description=FreeDOM tunnel server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=freedom
+WorkingDirectory=/opt/freedom
+EnvironmentFile=/etc/freedom/server.env
+ExecStart=/opt/freedom/freedom-server --http-bind 127.0.0.1 --ask-port 7836 --tcp-ports 20000-40000
+Restart=always
+RestartSec=2
+# No artificial limits: allow a huge number of simultaneous connections.
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>freedom-cli</AssemblyName>
+    <RootNamespace>FreeDom.Client</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FreeDom.ClientCore\FreeDom.ClientCore.csproj" />
+  </ItemGroup>
+</Project>

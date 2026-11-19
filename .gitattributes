@@ -1,0 +1,6 @@
+* text=auto
+# Files that end up on the Linux VPS must keep LF line endings.
+deploy/** text eol=lf
+*.sh text eol=lf
+*.png binary
+*.ico binary

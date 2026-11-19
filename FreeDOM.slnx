@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FreeDom.Client/FreeDom.Client.csproj" />
+    <Project Path="src/FreeDom.ClientCore/FreeDom.ClientCore.csproj" />
+    <Project Path="src/FreeDom.Core/FreeDom.Core.csproj" />
+    <Project Path="src/FreeDom.Gui/FreeDom.Gui.csproj" />
+    <Project Path="src/FreeDom.Server/FreeDom.Server.csproj" />
+  </Folder>
+</Solution>

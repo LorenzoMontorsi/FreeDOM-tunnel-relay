@@ -1,0 +1,22 @@
+# Caddy in front of freedom-server: real HTTPS certificates (Let's Encrypt) for every tunnel.
+# Replace tunnel.example.com with your domain. DNS: A record for tunnel.example.com AND *.tunnel.example.com -> VPS IP.
+
+{
+	on_demand_tls {
+		# Certificates are issued only for hostnames that currently have a tunnel online.
+		ask http://127.0.0.1:7836/check
+	}
+}
+
+*.tunnel.example.com {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8080 {
+		transport http {
+			# REQUIRED: freedom-server routes by the Host of the first request on each upstream
+			# connection, so Caddy must not reuse one upstream connection across different tunnels.
+			keepalive off
+		}
+	}
+}
