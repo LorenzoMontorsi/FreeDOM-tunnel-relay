@@ -40,8 +40,8 @@ foreach ($rid in $Runtimes) {
   <key>CFBundleName</key><string>FreeDOM</string>
   <key>CFBundleDisplayName</key><string>FreeDOM</string>
   <key>CFBundleIdentifier</key><string>app.freedom.client</string>
-  <key>CFBundleVersion</key><string>0.1.0</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>0.2.0</string>
+  <key>CFBundleShortVersionString</key><string>0.2.0</string>
   <key>CFBundleExecutable</key><string>FreeDOM</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>

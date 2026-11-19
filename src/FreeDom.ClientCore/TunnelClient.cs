@@ -141,6 +141,40 @@ public sealed class TunnelClient(ClientSettings settings)
         StateChanged?.Invoke(ClientState.Online, null);
         TunnelsOnline?.Invoke(active);
 
+        // UDP tunnels ride a separate encrypted UDP channel, alive as long as this control session.
+        using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        UdpClientRelay? udp = null;
+        Task? udpTask = null;
+        var udpTunnels = (response.Assigned ?? [])
+            .Where(a => a.Type == "udp" && _byName.ContainsKey(a.Name))
+            .Select(a => ((ushort)a.Id, _byName[a.Name]))
+            .ToList();
+        if (udpTunnels.Count > 0)
+        {
+            if (response.UdpKey is null || response.UdpPort == 0)
+                throw new FatalException("the server did not provide a UDP relay (server too old or started with --no-udp)");
+            udp = await UdpClientRelay.CreateAsync(settings.ServerHost, response.UdpPort, response.UdpSession,
+                Convert.FromBase64String(response.UdpKey), udpTunnels, ct);
+            udpTask = udp.RunAsync(sessionCts.Token);
+        }
+
+        try
+        {
+            await ControlLoopAsync(channel, ct);
+        }
+        finally
+        {
+            sessionCts.Cancel();
+            udp?.Dispose();
+            if (udpTask is not null)
+            {
+                try { await udpTask; } catch { }
+            }
+        }
+    }
+
+    private async Task ControlLoopAsync(ControlChannel channel, CancellationToken ct)
+    {
         while (true)
         {
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);

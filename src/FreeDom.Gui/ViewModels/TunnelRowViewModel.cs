@@ -8,7 +8,7 @@ public partial class TunnelRowViewModel : ObservableObject
 {
     private readonly MainViewModel _owner;
 
-    public static string[] Types { get; } = ["http", "tcp"];
+    public static string[] Types { get; } = ["http", "tcp", "udp"];
 
     public TunnelRowViewModel(MainViewModel owner) => _owner = owner;
 
@@ -16,7 +16,7 @@ public partial class TunnelRowViewModel : ObservableObject
     [ObservableProperty] public partial string Name { get; set; } = "";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsHttp), nameof(IsTcp))]
+    [NotifyPropertyChangedFor(nameof(IsHttp), nameof(UsesPort))]
     public partial string Type { get; set; } = "http";
 
     [ObservableProperty] public partial string Local { get; set; } = "";
@@ -33,13 +33,14 @@ public partial class TunnelRowViewModel : ObservableObject
     [ObservableProperty] public partial bool IsEditable { get; set; } = true;
 
     public bool IsHttp => Type == "http";
-    public bool IsTcp => Type == "tcp";
+    /// <summary>tcp and udp tunnels are exposed on a public port.</summary>
+    public bool UsesPort => Type is "tcp" or "udp";
     public bool HasPublicUrl => !string.IsNullOrEmpty(PublicUrl);
 
     /// <summary>Property names that are runtime-only and must not trigger a config save.</summary>
     public static bool IsRuntimeProperty(string? name) =>
         name is nameof(PublicUrl) or nameof(LocalTarget) or nameof(IsEditable) or nameof(HasPublicUrl)
-            or nameof(IsHttp) or nameof(IsTcp);
+            or nameof(IsHttp) or nameof(UsesPort);
 
     [RelayCommand] private void Remove() => _owner.RemoveTunnel(this);
     [RelayCommand] private Task Copy() => _owner.CopyAsync(PublicUrl);
@@ -49,7 +50,7 @@ public partial class TunnelRowViewModel : ObservableObject
     {
         Enabled = !t.Disabled,
         Name = t.Name,
-        Type = t.Type is "tcp" ? "tcp" : "http",
+        Type = t.Type is "tcp" or "udp" ? t.Type : "http",
         Local = t.Local,
         Subdomain = t.Subdomain ?? "",
         Hostname = t.Hostname ?? "",

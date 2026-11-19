@@ -15,10 +15,14 @@ sealed class TunnelServer(ServerOptions options, X509Certificate2? certificate)
 
     private readonly ConcurrentDictionary<string, HttpRoute> _http = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<int, Session> _tcpPorts = new();
+    private readonly ConcurrentDictionary<int, Session> _udpPorts = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Conn>> _pending = new();
     private readonly ConcurrentDictionary<string, Session> _byClient = new();
 
     public ServerOptions Options { get; } = options;
+
+    /// <summary>Encrypted UDP channel to clients; null when UDP is disabled.</summary>
+    public UdpRelay? Relay { get; private set; }
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -27,6 +31,14 @@ sealed class TunnelServer(ServerOptions options, X509Certificate2? certificate)
         var control = Net.Listen(Options.ControlBind, Options.ControlPort);
         Log.Info($"Control channel listening on {Options.ControlBind}:{Options.ControlPort} ({(certificate is null ? "plain TCP" : "TLS")})");
         loops.Add(AcceptLoop(control, s => HandleControlAsync(s, ct), ct));
+
+        if (Options.UdpEnabled)
+        {
+            Relay = new UdpRelay(UdpSockets.Bind(Options.ControlBind, Options.ControlPort));
+            Log.Info($"UDP relay listening on {Options.ControlBind}:{Options.ControlPort}/udp " +
+                     $"(UDP tunnel ports {Options.UdpPorts})");
+            loops.Add(Relay.RunAsync(ct));
+        }
 
         if (Options.HttpPort > 0)
         {
@@ -132,6 +144,9 @@ sealed class TunnelServer(ServerOptions options, X509Certificate2? certificate)
     public bool TryAddPort(int port, Session s) => _tcpPorts.TryAdd(port, s);
     public bool IsPortTaken(int port) => _tcpPorts.ContainsKey(port);
     public void RemovePort(int port, Session s) => _tcpPorts.TryRemove(KeyValuePair.Create(port, s));
+    public bool TryAddUdpPort(int port, Session s) => _udpPorts.TryAdd(port, s);
+    public void RemoveUdpPort(int port, Session s) => _udpPorts.TryRemove(KeyValuePair.Create(port, s));
+    public bool IsReservedUdpPort(int port) => Relay is not null && port == Options.ControlPort;
     public void AddPending(string id, TaskCompletionSource<Conn> tcs) => _pending[id] = tcs;
     public void RemovePending(string id) => _pending.TryRemove(id, out _);
     public void RemoveClient(string clientId, Session s) => _byClient.TryRemove(KeyValuePair.Create(clientId, s));

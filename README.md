@@ -1,12 +1,13 @@
 # FreeDOM
 
-Tunnel self-hosted stile ngrok, in C# / .NET 10. Esponi un server locale (sito, API, SSH, giochi, qualsiasi TCP)
-attraverso la tua VPS. **Nessun limite** di tempo, banda, numero di tunnel o connessioni: l'unico limite è la rete.
+Tunnel self-hosted stile ngrok, in C# / .NET 10. Esponi un server locale (sito, API, SSH, server di gioco,
+qualsiasi servizio TCP o UDP) attraverso la tua VPS. **Nessun limite** di tempo, banda, numero di tunnel o
+connessioni: l'unico limite è la rete.
 
 ```
-[Visitatore] ──HTTPS──> [Caddy :443] ──> [freedom-server :8080] <══TLS══ [freedom (client)] ──> localhost:3000
-                                          │ :7835 canale di controllo
-[Visitatore] ──TCP────> [freedom-server :20000-40000] ───────────────────┘
+[Visitatore] ──HTTPS──> [Caddy :443] ──> [freedom-server :8080] <══TLS :7835/tcp══ [client FreeDOM] ──> localhost:3000
+[Visitatore] ──TCP────> [freedom-server :porta]  ───────────────────┘
+[Giocatore]  ──UDP────> [freedom-server :porta]  <══AES-GCM :7835/udp══ [client FreeDOM] ──> localhost:8000
 ```
 
 ## Come funziona
@@ -17,6 +18,10 @@ attraverso la tua VPS. **Nessun limite** di tempo, banda, numero di tunnel o con
   copiati in modo trasparente nei due sensi (WebSocket, SSE, upload enormi, tutto funziona).
 - Tunnel `http`: smistati per sottodominio tramite l'header `Host`.
 - Tunnel `tcp`: una porta pubblica dedicata sulla VPS.
+- Tunnel `udp` (server di gioco): i datagrammi viaggiano su un **canale UDP vero**, non incapsulati in TCP, quindi
+  niente latenza aggiunta da ritrasmissioni. Il canale è cifrato e autenticato (AES-256-GCM, chiave di sessione
+  scambiata sul canale TLS) e attraversa il NAT di casa grazie ai keepalive del client. Ogni giocatore ottiene un
+  socket locale separato, così il server di gioco li vede come peer distinti.
 
 ## Componenti
 
@@ -62,7 +67,13 @@ Su macOS viene creato anche `FreeDOM.app`.
    ```
    > Il `keepalive off` nel Caddyfile è **obbligatorio**: senza, Caddy riuserebbe una connessione verso il server
    > per tunnel diversi.
-4. **Firewall**: apri `80`, `443`, `7835` e il range TCP (`20000-40000`), es. `ufw allow 7835/tcp`.
+4. **Firewall**: apri `80/tcp`, `443/tcp`, `7835/tcp` **e `7835/udp`** (canale UDP), più le porte pubbliche dei
+   tunnel TCP/UDP che usi, es.:
+   ```bash
+   sudo ufw allow 80,443,7835/tcp && sudo ufw allow 7835/udp
+   sudo ufw allow 2102/tcp && sudo ufw allow 8000/udp     # esempio: server Fallout 76
+   ```
+   Se il provider ha anche un firewall nel pannello web, aprile anche lì.
 
 Se sulla VPS c'è già nginx al posto di Caddy: basta un `server_name *.tunnel.example.com` con
 `proxy_pass http://127.0.0.1:8080;` e `proxy_set_header Host $host;` (nginx non riusa le connessioni upstream di default).
@@ -92,6 +103,8 @@ freedom-cli http 3000 --server tunnel.example.com --token SEGRETO --fingerprint 
 #   -> https://blog.tunnel.example.com
 freedom-cli tcp 22 --server tunnel.example.com --token SEGRETO --fingerprint <SHA256> --remote-port 2222
 #   -> ssh -p 2222 utente@tunnel.example.com
+freedom-cli udp 2456 --server tunnel.example.com --token SEGRETO --fingerprint <SHA256> --remote-port 2456
+#   -> server Valheim raggiungibile su tunnel.example.com:2456
 
 # con file di configurazione (più tunnel insieme, stesso formato della GUI)
 freedom-cli init            # crea freedom.json di esempio
@@ -107,7 +120,8 @@ freedom-cli start
   "tunnels": [
     { "name": "web", "type": "http", "local": "3000", "subdomain": "blog" },
     { "name": "api", "type": "http", "local": "192.168.1.20:8080", "hostname": "api.miodominio.it" },
-    { "name": "ssh", "type": "tcp",  "local": "22", "remotePort": 2222 }
+    { "name": "ssh", "type": "tcp",  "local": "22", "remotePort": 2222 },
+    { "name": "game", "type": "udp", "local": "8000", "remotePort": 8000 }
   ]
 }
 ```
@@ -129,7 +143,9 @@ freedom-cli start
 | `--control-port` | 7835 | porta del canale di controllo |
 | `--http-port` / `--http-bind` | 8080 / 0.0.0.0 | front HTTP; `127.0.0.1` dietro Caddy |
 | `--ask-port` | off | endpoint per l'on-demand TLS di Caddy |
-| `--tcp-ports` | 1024-65535 | range consentito per i tunnel TCP |
+| `--tcp-ports` | 1024-65535 | porte consentite per i tunnel TCP, anche liste: `2102,20000-40000` |
+| `--udp-ports` | 1024-65535 | porte consentite per i tunnel UDP, es. `8000,2456-2458` |
+| `--no-udp` | – | disattiva i tunnel UDP e il canale UDP sulla porta di controllo |
 | `--tls` | auto | certificato self-signed autogenerato in `freedom-server.pfx`; `--tls-cert/--tls-key` per un PEM |
 
 ## Sicurezza
@@ -140,8 +156,23 @@ freedom-cli start
   rate limit di Let's Encrypt.
 - Chi ha il token può aprire tunnel: non darlo in giro.
 
+## Server di gioco
+
+- Usa un tunnel `udp` per il traffico di gioco e un tunnel `tcp` per eventuali porte TCP (login, query, RCON).
+  Conviene usare **le stesse porte pubbliche** del server locale (`remotePort` = porta locale).
+- Molti giochi comunicano ai client l'indirizzo a cui collegarsi: imposta nel server di gioco l'**IP pubblico della
+  VPS** (es. `OverrideIP` / `AdvertisedHost` per Server76, "public IP" in altri giochi), altrimenti i client
+  proveranno a raggiungere direttamente il tuo PC.
+- Esempio Fallout 76 (Server76): tunnel `tcp` 2102 → 2102 e `udp` 8000 → 8000.
+- Esempio Valheim: tunnel `udp` 2456, 2457 (e 2458) con le stesse porte pubbliche.
+- I flussi UDP inattivi da più di 2 minuti vengono chiusi; un giocatore che torna attivo ne apre uno nuovo.
+
 ## Limiti noti
 
-- Per i tunnel http dietro Caddy l'IP del visitatore arriva in `X-Forwarded-For`; sui tunnel TCP l'app vede l'IP del client locale.
+- Il server di gioco / l'app vedono tutte le connessioni come provenienti da `127.0.0.1` (porte diverse per ogni
+  giocatore): i ban per IP non funzionano e i limiti di connessione per IP vanno disattivati. Non tunnelare servizi
+  che si fidano di "localhost" senza autenticazione.
+- Per i tunnel http dietro Caddy l'IP del visitatore arriva in `X-Forwarded-For`.
 - Non c'è riscrittura dell'header `Host` verso il server locale: dev server che verificano l'host (es. Vite) vanno configurati
   per accettare il dominio del tunnel.
+- Se una rete blocca l'UDP in uscita, i tunnel `udp` non funzionano (il client lo segnala nel log dopo 10 secondi).

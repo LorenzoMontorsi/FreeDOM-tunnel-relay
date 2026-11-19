@@ -47,6 +47,8 @@ public sealed class TunnelRequest
 
 public sealed class TunnelInfo
 {
+    /// <summary>For UDP tunnels: the id used in relay packets.</summary>
+    public int Id { get; set; }
     public string Name { get; set; } = "";
     public string Type { get; set; } = "";
     public string PublicUrl { get; set; } = "";
@@ -66,6 +68,12 @@ public sealed class Message
     public string? Error { get; set; }
     /// <summary>On errors: true when retrying cannot help (bad token, invalid request).</summary>
     public bool Fatal { get; set; }
+
+    // UDP relay parameters, sent in hello_ok when the client asked for UDP tunnels.
+    public int UdpPort { get; set; }
+    public uint UdpSession { get; set; }
+    /// <summary>Base64 AES-256-GCM key for the UDP relay of this session.</summary>
+    public string? UdpKey { get; set; }
 }
 
 [JsonSourceGenerationOptions(

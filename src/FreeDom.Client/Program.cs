@@ -8,6 +8,7 @@ const string Help = """
     Usage:
       freedom-cli http <local> [--subdomain <name> | --hostname <host>]   expose a local HTTP server
       freedom-cli tcp  <local> [--remote-port <n>]                          expose any TCP service
+      freedom-cli udp  <local> [--remote-port <n>]                          expose a UDP service (game servers)
       freedom-cli start [--config freedom.json]                             start every tunnel in the config file
       freedom-cli init  [--config freedom.json]                             write an example config file
 
@@ -19,7 +20,7 @@ const string Help = """
       --fingerprint <sha256>   Trust the server's self-signed certificate with this fingerprint
       --insecure               Skip certificate validation entirely (testing only)
       --no-tls                 Plain TCP control channel (server must run with --tls off)
-      --name <name>            Tunnel name (http/tcp commands)
+      --name <name>            Tunnel name (http/tcp/udp commands)
       --config <path>          Config file (default ./freedom.json when present)
       --verbose                Log every connection
     """;
@@ -79,7 +80,7 @@ try
     var tunnels = new List<ClientTunnel>();
     switch (command)
     {
-        case "http" or "tcp":
+        case "http" or "tcp" or "udp":
             if (a.Positional.Count != 2) throw new ArgumentException($"usage: freedom-cli {command} <local>");
             tunnels.Add(new ClientTunnel
             {

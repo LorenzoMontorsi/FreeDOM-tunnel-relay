@@ -21,8 +21,10 @@ sealed class ServerOptions
     public int AskPort { get; private set; }
 
     public string TcpBind { get; private set; } = "0.0.0.0";
-    public int TcpMin { get; private set; } = 1024;
-    public int TcpMax { get; private set; } = 65535;
+    public PortSet TcpPorts { get; private set; } = PortSet.All;
+    public string UdpBind { get; private set; } = "0.0.0.0";
+    public PortSet UdpPorts { get; private set; } = PortSet.All;
+    public bool UdpEnabled { get; private set; } = true;
 
     public string Tls { get; private set; } = "auto";
     public string? TlsCert { get; private set; }
@@ -46,8 +48,11 @@ sealed class ServerOptions
           --http-bind <ip>         Bind address for the HTTP front; use 127.0.0.1 behind Caddy/nginx
           --ask-port <n>           Caddy on-demand TLS "ask" endpoint on 127.0.0.1 (default off)
 
-          --tcp-ports <min-max>    Port range allowed for TCP tunnels              (default 1024-65535)
+          --tcp-ports <list>       Ports allowed for TCP tunnels, e.g. 2102,20000-40000 (default 1024-65535)
           --tcp-bind <ip>          Bind address for TCP tunnels                    (default 0.0.0.0)
+          --udp-ports <list>       Ports allowed for UDP tunnels, e.g. 8000,2456-2458   (default 1024-65535)
+          --udp-bind <ip>          Bind address for UDP tunnels                    (default 0.0.0.0)
+          --no-udp                 Disable UDP tunnels (and the UDP relay on the control port)
 
           --tls <auto|off>         Control channel TLS. auto = self-signed cert stored in --tls-file (default auto)
           --tls-file <path>        Where the auto-generated certificate lives      (default freedom-server.pfx)
@@ -64,8 +69,9 @@ sealed class ServerOptions
     {
         var a = CliArgs.Parse(args,
             ["domain", "public-host", "public-scheme", "public-port", "token", "control-bind", "control-port",
-             "http-bind", "http-port", "ask-port", "tcp-bind", "tcp-ports", "tls", "tls-cert", "tls-key", "tls-file"],
-            ["no-auth", "verbose"]);
+             "http-bind", "http-port", "ask-port", "tcp-bind", "tcp-ports", "udp-bind", "udp-ports",
+             "tls", "tls-cert", "tls-key", "tls-file"],
+            ["no-auth", "verbose", "no-udp"]);
 
         if (a.Has("help")) { Console.WriteLine(Help); return null; }
         if (a.Positional.Count > 0) throw new ArgumentException($"unexpected argument '{a.Positional[0]}'");
@@ -91,15 +97,10 @@ sealed class ServerOptions
         };
         o.PublicHost = Normalize(a.Get("public-host")) ?? o.Domain;
 
-        if (a.Get("tcp-ports") is { } range)
-        {
-            var parts = range.Split('-', 2);
-            if (parts.Length != 2 || !int.TryParse(parts[0], out int min) || !int.TryParse(parts[1], out int max)
-                || min < 1 || max > 65535 || min > max)
-                throw new ArgumentException($"invalid --tcp-ports '{range}', expected e.g. 20000-30000");
-            o.TcpMin = min;
-            o.TcpMax = max;
-        }
+        if (a.Get("tcp-ports") is { } tcpPorts) o.TcpPorts = PortSet.Parse(tcpPorts, "--tcp-ports");
+        if (a.Get("udp-ports") is { } udpPorts) o.UdpPorts = PortSet.Parse(udpPorts, "--udp-ports");
+        o.UdpBind = a.Get("udp-bind") ?? "0.0.0.0";
+        o.UdpEnabled = !a.Has("no-udp");
 
         if (string.IsNullOrEmpty(o.Token) && !o.NoAuth)
             throw new ArgumentException("no token configured: pass --token <secret> (or FREEDOM_TOKEN), or --no-auth");

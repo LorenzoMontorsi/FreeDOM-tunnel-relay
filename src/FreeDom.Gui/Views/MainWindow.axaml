@@ -126,7 +126,7 @@
                         <TextBox Grid.Column="1" Text="{Binding Hostname}" PlaceholderText="oppure dominio tuo (opz.)"
                                  IsEnabled="{Binding IsEditable}" />
                       </Grid>
-                      <TextBox Grid.Column="4" IsVisible="{Binding IsTcp}" Text="{Binding RemotePort}"
+                      <TextBox Grid.Column="4" IsVisible="{Binding UsesPort}" Text="{Binding RemotePort}"
                                PlaceholderText="porta pubblica (vuoto = casuale)" IsEnabled="{Binding IsEditable}" />
 
                       <Button Grid.Column="5" Content="×" FontSize="18" Padding="0" Width="34" Height="32"

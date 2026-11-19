@@ -7,7 +7,9 @@ Wants=network-online.target
 User=freedom
 WorkingDirectory=/opt/freedom
 EnvironmentFile=/etc/freedom/server.env
-ExecStart=/opt/freedom/freedom-server --http-bind 127.0.0.1 --ask-port 7836 --tcp-ports 20000-40000
+# Tunnel ports are unrestricted (1024-65535) by default; narrow them with e.g.
+#   --tcp-ports 2102,20000-40000 --udp-ports 8000,2456-2458
+ExecStart=/opt/freedom/freedom-server --http-bind 127.0.0.1 --ask-port 7836
 Restart=always
 RestartSec=2
 # No artificial limits: allow a huge number of simultaneous connections.

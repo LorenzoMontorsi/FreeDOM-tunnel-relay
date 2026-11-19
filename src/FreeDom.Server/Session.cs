@@ -17,6 +17,8 @@ sealed partial class Session
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<(string Host, HttpRoute Route)> _hosts = [];
     private readonly List<(int Port, TcpListener Listener, string Tunnel)> _tcp = [];
+    private readonly List<int> _udpPorts = [];
+    private SessionUdp? _udp;
     private string _clientId = "";
     private int _cleanedUp;
 
@@ -80,8 +82,16 @@ sealed partial class Session
                 assigned.Add(info!);
             }
 
-            await _channel.SendAsync(new Message { Type = MsgType.HelloOk, Version = Proto.Version, Assigned = assigned }, ct);
+            var ok = new Message { Type = MsgType.HelloOk, Version = Proto.Version, Assigned = assigned };
+            if (_udp is not null)
+            {
+                ok.UdpPort = Opt.ControlPort;
+                ok.UdpSession = _udp.Id;
+                ok.UdpKey = Convert.ToBase64String(_udp.Key);
+            }
+            await _channel.SendAsync(ok, ct);
             _ready.TrySetResult();
+            _udp?.Start(ct);
             Log.Info($"[{Id}] client {_remote} online: {string.Join(", ", assigned.Select(a => $"{a.Name}={a.PublicUrl}"))}");
 
             foreach (var (_, listener, tunnel) in _tcp)
@@ -109,6 +119,8 @@ sealed partial class Session
                 return RegisterHttp(req);
             case "tcp":
                 return RegisterTcp(req);
+            case "udp":
+                return RegisterUdp(req);
             default:
                 return (null, $"unknown tunnel type '{req.Type}'", true);
         }
@@ -152,8 +164,8 @@ sealed partial class Session
     private (TunnelInfo?, string?, bool) RegisterTcp(TunnelRequest req)
     {
         int port = req.RemotePort;
-        if (port != 0 && (port < Opt.TcpMin || port > Opt.TcpMax))
-            return (null, $"port {port} outside the allowed range {Opt.TcpMin}-{Opt.TcpMax}", true);
+        if (port != 0 && !Opt.TcpPorts.Contains(port))
+            return (null, $"TCP port {port} is not allowed by the server (allowed: {Opt.TcpPorts})", true);
         if (port != 0 && _server.IsReservedPort(port))
             return (null, $"port {port} is reserved by the server", true);
 
@@ -172,7 +184,7 @@ sealed partial class Session
         {
             for (int attempt = 0; attempt < 200 && listener is null; attempt++)
             {
-                int candidate = Random.Shared.Next(Opt.TcpMin, Opt.TcpMax + 1);
+                int candidate = Opt.TcpPorts.Random();
                 if (_server.IsReservedPort(candidate) || !_server.TryAddPort(candidate, this)) continue;
                 try { listener = Net.Listen(Opt.TcpBind, candidate); port = candidate; }
                 catch (SocketException) { _server.RemovePort(candidate, this); }
@@ -183,6 +195,46 @@ sealed partial class Session
         _tcp.Add((port, listener, req.Name));
         string host = Opt.PublicHost ?? "your-server";
         return (new TunnelInfo { Name = req.Name, Type = "tcp", PublicUrl = $"tcp://{host}:{port}" }, null, false);
+    }
+
+    private (TunnelInfo?, string?, bool) RegisterUdp(TunnelRequest req)
+    {
+        if (_server.Relay is null) return (null, "UDP tunnels are disabled on this server", true);
+
+        int port = req.RemotePort;
+        if (port != 0 && !Opt.UdpPorts.Contains(port))
+            return (null, $"UDP port {port} is not allowed by the server (allowed: {Opt.UdpPorts})", true);
+        if (port != 0 && _server.IsReservedUdpPort(port))
+            return (null, $"UDP port {port} is reserved by the server", true);
+
+        Socket? socket = null;
+        if (port != 0)
+        {
+            if (!_server.TryAddUdpPort(port, this)) return (null, $"UDP port {port} is already in use by another tunnel", false);
+            try { socket = UdpSockets.Bind(Opt.UdpBind, port); }
+            catch (SocketException ex)
+            {
+                _server.RemoveUdpPort(port, this);
+                return (null, $"cannot listen on UDP port {port}: {ex.Message}", false);
+            }
+        }
+        else
+        {
+            for (int attempt = 0; attempt < 200 && socket is null; attempt++)
+            {
+                int candidate = Opt.UdpPorts.Random();
+                if (_server.IsReservedUdpPort(candidate) || !_server.TryAddUdpPort(candidate, this)) continue;
+                try { socket = UdpSockets.Bind(Opt.UdpBind, candidate); port = candidate; }
+                catch (SocketException) { _server.RemoveUdpPort(candidate, this); }
+            }
+            if (socket is null) return (null, "no free port available for UDP tunnel", false);
+        }
+
+        _udpPorts.Add(port);
+        _udp ??= new SessionUdp(_server.Relay, Id);
+        ushort id = _udp.AddPort(socket, port, req.Name);
+        string host = Opt.PublicHost ?? "your-server";
+        return (new TunnelInfo { Id = id, Name = req.Name, Type = "udp", PublicUrl = $"udp://{host}:{port}" }, null, false);
     }
 
     /// <summary>Asks the client to open a data connection for <paramref name="tunnel"/> and waits for it.</summary>
@@ -279,9 +331,11 @@ sealed partial class Session
             try { listener.Stop(); } catch { }
             _server.RemovePort(port, this);
         }
+        _udp?.Dispose();
+        foreach (var port in _udpPorts) _server.RemoveUdpPort(port, this);
         if (_clientId.Length > 0) _server.RemoveClient(_clientId, this);
         _conn.Dispose();
-        if (_hosts.Count + _tcp.Count > 0) Log.Info($"[{Id}] client {_remote} offline");
+        if (_hosts.Count + _tcp.Count + _udpPorts.Count > 0) Log.Info($"[{Id}] client {_remote} offline");
         _closed.TrySetResult();
     }
 

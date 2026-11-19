@@ -96,7 +96,7 @@ public sealed class ResolvedTunnel
     {
         string type = t.Type.Trim().ToLowerInvariant();
         string label = string.IsNullOrWhiteSpace(t.Name) ? $"#{index + 1}" : t.Name;
-        if (type is not ("http" or "tcp")) throw new ArgumentException($"tunnel '{label}': type must be http or tcp");
+        if (type is not ("http" or "tcp" or "udp")) throw new ArgumentException($"tunnel '{label}': type must be http, tcp or udp");
         if (string.IsNullOrWhiteSpace(t.Local)) throw new ArgumentException($"tunnel '{label}': missing local address");
         var (host, port) = Net.ParseHostPort(t.Local, "localhost", type == "http" ? 80 : null);
         string name = string.IsNullOrWhiteSpace(t.Name) ? (index == 0 ? type : $"{type}{index + 1}") : t.Name.Trim();
